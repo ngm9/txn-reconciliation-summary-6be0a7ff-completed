@@ -13,25 +13,27 @@ def load_transactions(csv_path: str) -> pd.DataFrame:
     if missing:
         raise ValueError("missing required columns")
 
-    df["status"] = df["status"]
+    df["amount"] = pd.to_numeric(df["amount"],errors="coerce")
+    df["txn_date"] = pd.to_datetime(df["txn_date"])
+    df["status"] = df["status"].fillna("").astype(str).str.strip().str.lower()
     return df
 
 
 def add_settled_flag(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    flags = []
-    for value in df["status"]:
-        flags.append(value == "settled")
-    df["is_settled"] = flags
+    status=df["status"].fillna("").astype(str).str.strip().str.lower()
+    df["status"]=status
+
+    df["is_settled"]=np.where(status.to_numpy() == "settled",True,False)
     return df
 
 
 def build_daily_summary(df: pd.DataFrame) -> pd.DataFrame:
     flagged = add_settled_flag(df)
-    successful = flagged[flagged["is_settled"]]
-
+    successful = flagged[flagged["is_settled"]].copy()
+    successful["txn_date"]=pd.to_datetime(successful["txn_date"]).dt.normalize()
     summary = (
-        successful.groupby(["account_id"], as_index=False)
-        .agg(total_amount=("amount", "sum"), txn_count=("amount", "count"))
+        successful.groupby(["account_id","txn_date"], as_index=False)
+        .agg(total_amount=("amount", "sum"), txn_count=("amount", "size"))
     )
     return summary
